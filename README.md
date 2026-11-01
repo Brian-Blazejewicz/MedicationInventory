@@ -115,8 +115,6 @@ MedicationInventory/
 ├── medication_gui.py
 ├── product_details.csv
 ├── README.md
-├── requirements.txt
-├── CHANGELOG.md
 ├── .gitignore
 │
 ├── tests/
