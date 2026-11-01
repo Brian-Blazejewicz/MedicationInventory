@@ -27,9 +27,17 @@ class InventoryApp:
         self.sort = {}
         self.tables = {}
         self.search = tk.StringVar()
+        self.lot_search = tk.StringVar()
         self.status = tk.StringVar(
             value='Ready. Quantities are individual medication units.'
         )
+
+        tk.Label(
+            root,
+            text='DEMONSTRATION ONLY — ALL DATA IS FABRICATED. NOT FOR PHARMACY USE, DISPENSING, OR PATIENT CARE.',
+            fg='#8B0000', bg='#FFF0D9', font=('TkDefaultFont', 10, 'bold'),
+            wraplength=1150, pady=9
+        ).pack(fill='x', padx=10, pady=(8, 2))
 
         self.tabs = ttk.Notebook(root)
         self.tabs.pack(fill='both', expand=True, padx=10, pady=8)
@@ -91,15 +99,14 @@ class InventoryApp:
                 anchor='w'
             )
 
-        scroll = ttk.Scrollbar(
-            frame,
-            orient='vertical',
-            command=tree.yview
-        )
-        tree.configure(yscrollcommand=scroll.set)
-
-        tree.pack(side='left', fill='both', expand=True)
-        scroll.pack(side='right', fill='y')
+        frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(0, weight=1)
+        vertical = ttk.Scrollbar(frame, orient='vertical', command=tree.yview)
+        horizontal = ttk.Scrollbar(frame, orient='horizontal', command=tree.xview)
+        tree.configure(yscrollcommand=vertical.set, xscrollcommand=horizontal.set)
+        tree.grid(row=0, column=0, sticky='nsew')
+        vertical.grid(row=0, column=1, sticky='ns')
+        horizontal.grid(row=1, column=0, sticky='ew')
 
         self.tables[key] = tree
         return tree
@@ -113,11 +120,13 @@ class InventoryApp:
         row.pack(fill='x', padx=8, pady=8)
 
         ttk.Label(row, text='Search:').pack(side='left')
-        ttk.Entry(
+        search_entry = ttk.Entry(
             row,
             textvariable=self.search,
             width=35
-        ).pack(side='left', padx=8)
+        )
+        search_entry.pack(side='left', padx=8)
+        search_entry.bind('<Return>', lambda event: self.refresh())
 
         ttk.Button(
             row,
@@ -130,6 +139,11 @@ class InventoryApp:
             text='Expiring within 3 months',
             command=self.expiring_report
         ).pack(side='left', padx=8)
+
+        ttk.Button(
+            row, text='Expired inventory',
+            command=self.expired_report
+        ).pack(side='left', padx=4)
 
         self.make_table(
             tab,
@@ -210,6 +224,15 @@ class InventoryApp:
             command=self.scan
         ).pack(side='left')
 
+        lot_row = ttk.Frame(tab)
+        lot_row.pack(fill='x', padx=8, pady=(3, 0))
+        ttk.Label(lot_row, text='Find lot / NDC / medication:').pack(side='left')
+        lot_entry = ttk.Entry(lot_row, textvariable=self.lot_search, width=35)
+        lot_entry.pack(side='left', padx=8)
+        lot_entry.bind('<Return>', lambda event: self.refresh())
+        ttk.Button(lot_row, text='Search lots', command=self.refresh).pack(side='left')
+        ttk.Button(lot_row, text='Clear', command=self.clear_lot_search).pack(side='left', padx=5)
+
         self.make_table(
             tab,
             'stock',
@@ -220,7 +243,7 @@ class InventoryApp:
         )
 
     def build_amber_tab(self):
-        """Create controls for vial transfers and dispensing scans."""
+        """Create controls for vial transfers and simulated inventory removal scans."""
         tab = ttk.Frame(self.tabs)
         self.tabs.add(tab, text='Amber vials')
 
@@ -357,13 +380,7 @@ class InventoryApp:
                 (term, term, term)
             ).fetchall()
 
-            stock = conn.execute(
-                '''SELECT s.id, s.ndc, p.name, p.brand, p.strength,
-                          s.lot_number, s.expiration_date, s.quantity
-                   FROM stock_lots s
-                   JOIN products p ON p.ndc = s.ndc
-                   ORDER BY p.name, s.expiration_date'''
-            ).fetchall()
+            stock = db.search_lots(self.lot_search.get())
 
             amber = conn.execute(
                 '''SELECT a.id, a.ndc, p.name, p.brand, p.strength,
@@ -395,6 +412,10 @@ class InventoryApp:
             f'{sum(r[7] for r in all_rows)} total individual units. '
             'Stock and amber vial quantities included.'
         )
+
+    def clear_lot_search(self):
+        self.lot_search.set('')
+        self.refresh()
 
     def perform(self, fn):
         """Execute an action, refresh the GUI, and display handled errors."""
@@ -456,8 +477,12 @@ class InventoryApp:
             self.vial_qty.focus_set()
             return
 
-        stock_id = int(source_text)
-        quantity = int(quantity_text)
+        try:
+            stock_id = db.parse_positive_id(source_text, 'Source stock ID')
+            quantity = db.parse_positive_id(quantity_text, 'Transfer quantity')
+        except ValueError as exc:
+            messagebox.showerror('Invalid vial details', str(exc))
+            return
 
         if stock_id <= 0 or quantity <= 0:
             messagebox.showerror(
@@ -480,7 +505,7 @@ class InventoryApp:
             f'Vial ID: {vial_id}\n'
             'Lot: 00000000\n'
             f'Expiration: {expiration}\n'
-            f'Scan OUT:VIAL-{vial_id} to dispense units.'
+            f'Scan OUT:VIAL-{vial_id} for simulated removal (not dispensing).'
         )
 
     def scan(self, vial=False):
@@ -501,72 +526,58 @@ class InventoryApp:
 
         field.focus_set()
 
+    def expired_report(self):
+        """Show positive-quantity records whose recorded expiry is in the past."""
+        self.expiration_report(expired=True)
+
     def expiring_report(self):
-        """Display positive-quantity items expiring within three months.
+        """Show positive-quantity records expiring in the next three months."""
+        self.expiration_report(expired=False)
 
-        Include stock lots and amber vials expiring between today
-        and three calendar months from today, inclusive.
-        """
+    def expiration_report(self, expired=False):
+        """Display stock and amber records in an expiration-date window."""
         today = date.today().isoformat()
-        cutoff = db.months_after(
-            date.today(), 3
-        ).isoformat()
-
+        cutoff = db.months_after(date.today(), 3).isoformat()
+        where = 'expiration_date < ?' if expired else 'expiration_date BETWEEN ? AND ?'
+        params = (today,) if expired else (today, cutoff)
         with db.connect_db() as conn:
             rows = conn.execute(
-                '''SELECT 'STOCK', s.id, s.ndc, p.name,
-                          s.lot_number, s.expiration_date, s.quantity
-                   FROM stock_lots s
-                   JOIN products p ON p.ndc = s.ndc
-                   WHERE s.quantity > 0
-                     AND s.expiration_date BETWEEN ? AND ?
-
-                   UNION ALL
-
-                   SELECT 'AMBER', a.id, a.ndc, p.name,
-                          a.lot_number, a.expiration_date, a.quantity
-                   FROM amber_vials a
-                   JOIN products p ON p.ndc = a.ndc
-                   WHERE a.quantity > 0
-                     AND a.expiration_date BETWEEN ? AND ?
-                   ORDER BY 6''',
-                (today, cutoff, today, cutoff)
+                f"""SELECT 'STOCK', s.id, s.ndc, p.name,
+                           s.lot_number, s.expiration_date, s.quantity
+                    FROM stock_lots s JOIN products p ON p.ndc=s.ndc
+                    WHERE s.quantity > 0 AND s.{where}
+                    UNION ALL
+                    SELECT 'AMBER', a.id, a.ndc, p.name,
+                           a.lot_number, a.expiration_date, a.quantity
+                    FROM amber_vials a JOIN products p ON p.ndc=a.ndc
+                    WHERE a.quantity > 0 AND a.{where}
+                    ORDER BY 6""",
+                params + params
             ).fetchall()
-
+        title = 'Expired inventory' if expired else 'Expiring within 3 months'
         window = tk.Toplevel(self.root)
-        window.title('Expiring within 3 months')
-        window.geometry('920x480')
-
-        cols = (
-            'type', 'id', 'ndc', 'name',
-            'lot', 'expiration', 'units'
-        )
-
-        tree = ttk.Treeview(
-            window,
-            columns=cols,
-            show='headings'
-        )
-
+        window.title(title + ' — FABRICATED DEMO DATA')
+        window.geometry('980x500')
+        ttk.Label(window, text='SIMULATED DATA ONLY — NOT FOR PHARMACY USE').pack(pady=5)
+        frame = ttk.Frame(window)
+        frame.pack(fill='both', expand=True, padx=10, pady=5)
+        cols = ('type', 'id', 'ndc', 'name', 'lot', 'expiration', 'units')
+        tree = ttk.Treeview(frame, columns=cols, show='headings')
         for col in cols:
             tree.heading(col, text=col.title())
-            tree.column(col, width=125)
-
-        tree.pack(
-            fill='both',
-            expand=True,
-            padx=10,
-            pady=10
-        )
-
+            tree.column(col, width=130)
+        vertical = ttk.Scrollbar(frame, orient='vertical', command=tree.yview)
+        horizontal = ttk.Scrollbar(frame, orient='horizontal', command=tree.xview)
+        tree.configure(yscrollcommand=vertical.set, xscrollcommand=horizontal.set)
+        frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(0, weight=1)
+        tree.grid(row=0, column=0, sticky='nsew')
+        vertical.grid(row=0, column=1, sticky='ns')
+        horizontal.grid(row=1, column=0, sticky='ew')
         for row in rows:
             tree.insert('', 'end', values=row)
-
-        ttk.Label(
-            window,
-            text=f'{len(rows)} records expiring '
-                 f'{today} through {cutoff} (inclusive)'
-        ).pack(pady=4)
+        description = (f'before {today}' if expired else f'{today} through {cutoff} (inclusive)')
+        ttk.Label(window, text=f'{len(rows)} simulated records: {description}').pack(pady=6)
 
 
 if __name__ == '__main__':
