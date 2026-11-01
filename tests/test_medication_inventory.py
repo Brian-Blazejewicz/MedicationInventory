@@ -503,6 +503,87 @@ class MedicationInventoryTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     inventory.parse_positive_id(invalid)
 
+    
+    def test_expired_stock_cannot_be_transferred(self):
+        expired = (date.today() - timedelta(days=1)).isoformat()
+        stock_id = inventory.add_stock_lot(
+            self.NDC, "OLD-DEMO-LOT", expired
+        )
+
+        with self.assertRaises(ValueError):
+            inventory.create_amber_vial(stock_id, 1)
+
+    def test_failed_transfer_preserves_inventory(self):
+        inventory.adjust_stock(self.stock_id, 3)
+
+        with self.assertRaises(ValueError):
+            inventory.create_amber_vial(self.stock_id, 4)
+
+        self.assertEqual(self.get_totals(), (3, 0, 3))
+
+    def test_migration_is_repeatable(self):
+        with inventory.connect_db() as conn:
+            conn.execute("""CREATE TABLE medications (
+                id INTEGER PRIMARY KEY,
+                name TEXT, brand TEXT, ndc TEXT,
+                expiration_date TEXT, lot_number TEXT,
+                quantity INTEGER
+            )""")
+            conn.execute(
+                """INSERT INTO medications
+                   (name, brand, ndc, expiration_date,
+                    lot_number, quantity)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (self.NAME, self.BRAND, self.NDC,
+                 self.expiration, "LEGACY-DEMO-LOT", 7)
+            )
+
+        metadata = {
+            self.NDC: (self.STRENGTH, self.PACKAGE_SIZE)
+        }
+
+        self.assertEqual(
+            inventory.migrate_legacy_rows(metadata), 1
+        )
+        self.assertEqual(
+            inventory.migrate_legacy_rows(metadata), 0
+        )
+
+    def test_migration_rolls_back_on_invalid_row(self):
+        with inventory.connect_db() as conn:
+            conn.execute("""CREATE TABLE medications (
+                id INTEGER PRIMARY KEY,
+                name TEXT, brand TEXT, ndc TEXT,
+                expiration_date TEXT, lot_number TEXT,
+                quantity INTEGER
+            )""")
+            conn.executemany(
+                """INSERT INTO medications
+                   (name, brand, ndc, expiration_date,
+                    lot_number, quantity)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                [
+                    (self.NAME, self.BRAND, self.NDC,
+                     self.expiration, "LEGACY-GOOD", 5),
+                    (self.NAME, self.BRAND, self.NDC,
+                     "invalid-date", "LEGACY-BAD", 2),
+                ]
+            )
+
+        with self.assertRaises(ValueError):
+            inventory.migrate_legacy_rows({
+                self.NDC: (
+                    self.STRENGTH, self.PACKAGE_SIZE
+                )
+            })
+
+        with inventory.connect_db() as conn:
+            count = conn.execute(
+                """SELECT COUNT(*) FROM stock_lots
+                   WHERE lot_number LIKE 'LEGACY-%'"""
+            ).fetchone()[0]
+
+        self.assertEqual(count, 0)
 
 if __name__ == "__main__":
     unittest.main()
