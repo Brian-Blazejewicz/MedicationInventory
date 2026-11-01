@@ -1,14 +1,32 @@
-# Python cache files
-__pycache__/
-*.pyc
 
-# Local environments
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Virtual environments
 .venv/
 venv/
+env/
 
-# Local database
-medications.db
+# Local SQLite databases
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
 
-# Editor files
+# Test and temporary files
+.pytest_cache/
+.coverage
+htmlcov/
+test_results.txt
+*.log
+
+# Editor settings
 .vscode/
 .idea/
+
+# Operating system files
+.DS_Store
+Thumbs.db
