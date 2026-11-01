@@ -678,6 +678,8 @@ def migrate_legacy_rows(metadata):
                FROM medications"""
         ).fetchall()
 
+        imported_count = 0
+        
         for _, name, brand, ndc, expiration, lot, qty in rows:
             if ndc not in metadata:
                 raise ValueError(
@@ -734,7 +736,8 @@ def migrate_legacy_rows(metadata):
                     (ndc, *proposed)
                 )
 
-            conn.execute(
+            
+            cursor = conn.execute(
                 """INSERT INTO stock_lots
                    (ndc, lot_number, expiration_date, quantity)
                    VALUES (?, ?, ?, ?)
@@ -742,8 +745,10 @@ def migrate_legacy_rows(metadata):
                    DO NOTHING""",
                 (ndc, lot, expiration, qty)
             )
+            imported_count += cursor.rowcount
 
-        return len(rows)
+        return imported_count
+
 
 
 if __name__ == "__main__":
