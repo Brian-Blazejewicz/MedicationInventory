@@ -214,7 +214,7 @@ Open the Transactions tab to review the history of simulated inventory changes.
 
 ## Automated Testing
 
-The project includes **24 automated unit tests** using Python's built-in `unittest` framework.
+The project includes **28 automated unit tests** using Python's built-in `unittest` framework.
 
 The tests cover:
 
@@ -253,7 +253,7 @@ python3 -m unittest discover -s tests -v
 The automated test suite was executed successfully on Windows.
 
 ```text
-Ran 24 tests
+Ran 28 tests
 
 OK
 ```
