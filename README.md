@@ -258,19 +258,41 @@ OK
 
 Each test uses a temporary SQLite database, helping isolate test data from the application's local inventory database.
 
-## Screenshots
 
-Screenshots of the application are stored in the `screenshots` directory.
+## Application Screenshots
 
-They can demonstrate the following features:
+The following screenshots demonstrate the main features of the Medication Inventory Management System, developed using Python, Tkinter, and SQLite.
 
-- Combined inventory by NDC
-- Stock bottles and boxes
-- Amber vial management
-- Inventory transactions
-- Expiration reporting
+### 1. Stock Bottle Management
 
-Screenshots should show fabricated demonstration records only.
+View and manage medication stock bottles, including inventory quantities and medication information.
+
+![Stock Bottle Management](screenshots/Stock_Bottles.png)
+
+### 2. Amber Vial Management
+
+Manage amber vials and track medication quantities across different inventory containers.
+
+![Amber Vial Management](screenshots/Amber_Vials.png)
+
+### 3. Stock and Amber Vial Inventory
+
+View stock bottles and amber vials together to support inventory organization and quantity tracking.
+
+![Stock and Amber Vials](screenshots/Stock_and_Amber_Vials.png)
+
+### 4. Inventory Transfers
+
+Record inventory transfers and maintain accurate inventory transaction histories.
+
+![Inventory Transfers](screenshots/Domestic_Transfers.png)
+
+### 5. Expiration Monitoring
+
+Identify medications approaching their expiration dates, including those expiring within the next three months.
+
+![Expiration Monitoring](screenshots/Expiring_Within_3_Months.png)
+
 
 ## Database Design
 
