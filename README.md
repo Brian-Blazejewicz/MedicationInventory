@@ -1,6 +1,8 @@
 
 # Medication Inventory
 
+[![Python Unit Tests](https://github.com/Brian-Blazejewicz/MedicationInventory/actions/workflows/python-tests.yml/badge.svg)](https://github.com/Brian-Blazejewicz/MedicationInventory/actions/workflows/python-tests.yml)
+
 ### Python | Tkinter | SQLite | Unit Testing
 
 A desktop inventory management application built with Python, Tkinter, and SQLite. This project demonstrates database management, graphical user interface development, inventory tracking, transaction logging, and automated software testing.
