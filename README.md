@@ -19,6 +19,48 @@ The application separates stock bottles and boxes from amber vials, allowing use
 
 The project was developed as part of my computer science portfolio to demonstrate practical software development skills, including Python programming, relational database design, input validation, error handling, and automated testing.
 
+
+## Software Architecture
+
+The application uses a layered structure to separate the graphical user interface, inventory management logic, and persistent data storage.
+
+### Presentation Layer
+**File:** `medication_gui.py`
+
+- Provides the desktop interface using Tkinter.
+- Displays medication inventory information.
+- Allows users to manage stock bottles and amber vials.
+- Provides inventory search and expiration monitoring.
+
+### Application Logic
+**File:** `medication_inventory.py`
+
+- Handles medication inventory operations.
+- Validates user inputs and inventory records.
+- Manages inventory quantities and transfers.
+- Records inventory movements.
+- Communicates with the SQLite database.
+
+### Database Layer
+**Technology:** SQLite
+
+The relational database includes:
+
+- `products` — Medication product information.
+- `stock_lots` — Stock bottle and lot records.
+- `amber_vials` — Amber vial inventory records.
+- `movements` — Inventory transaction history.
+- `inventory_totals` — SQL view for combined quantities.
+
+### Automated Testing
+
+The project uses Python's built-in `unittest` framework.
+
+Tests use isolated temporary SQLite databases to avoid modifying application data.
+
+GitHub Actions automatically executes the unit tests whenever changes are pushed or pull requests are opened.
+
+
 ## Features
 
 ### Medication Product Management
